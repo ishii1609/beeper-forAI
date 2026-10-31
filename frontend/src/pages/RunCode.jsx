@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import TestsPanel from "../Components/TestsPanel";
 const API_URL = "http://localhost:5000/api/code-review-loop";
 
 const STATUS_INFO = {
@@ -209,13 +210,25 @@ export default function RunCode() {
                       </li>
                     ))}
                   </ul>
+             
                 )}
+                <TestsPanel tests={r.tests} />
               </div>
             ))}
 
             <div>
               <h3 className="mb-2 font-semibold text-slate-200">Final code</h3>
               <CodeBlock code={result.finalCode} />
+              {result.testCode && (
+  <details className="mt-4 rounded-lg border border-slate-800 bg-slate-900">
+    <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-300">
+      Tests used for this run
+    </summary>
+    <div className="p-3">
+      <CodeBlock code={result.testCode} />
+    </div>
+  </details>
+)}
             </div>
           </div>
         )}

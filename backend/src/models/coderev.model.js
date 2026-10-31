@@ -6,14 +6,18 @@ const issueSchema = new mongoose.Schema(
 );
 
 const roundSchema = new mongoose.Schema(
-  { round: Number, code: String, issues: [issueSchema] },
+  { round: Number, code: String, issues: [issueSchema] ,tests: { status: String, output: String }},
+  
   { _id: false }
+  
 );
 
 const codeReviewRunSchema = new mongoose.Schema(
   { userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     spec: { type: String, required: true },
-    status: { type: String, required: true }, // approved / unresolved / stuck
+    status: { type: String, required: true },
+    testCode: String,
+    testsStatus: String, // approved / unresolved / stuck
     roundsUsed: Number,
     finalCode: String,
     remainingIssues: [issueSchema],
