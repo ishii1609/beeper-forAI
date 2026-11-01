@@ -1,7 +1,7 @@
 import { Routes, Route, useLocation } from "react-router-dom";
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import ProtectedRoute from "./Components/ProtectedRoute.jsx";
  import LandingPage from "./pages/Landingpage.jsx";
-import ChatPage from "./pages/ChatPage.jsx";
+import ChatPage from "./pages/Chatpage.jsx";
 import RunPage from "./pages/RunCode.jsx";
 import ComparePage from "./pages/ComparePage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
