@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import TestsPanel from "../Components/TestsPanel";
-const API_URL = "http://localhost:5000/api/code-review-loop";
+const API_URL = "https://beeper-forai.onrender.com/api/code-review-loop";
 
 const STATUS_INFO = {
   approved: {
