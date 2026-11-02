@@ -3,37 +3,34 @@ import axios from "axios";
 
 const AuthContext = createContext(null);
 const BACKEND_WAKE_URL = "https://beeper-forai.onrender.com/api/auth/me";
-const RETRY_DELAY_MS = 5000;
-const RETRY_WINDOW_MS = 120000;
+const WAKE_RETRY_MS = 5000;
+const WAKE_TIMEOUT_MS = 120000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function wakeBackend() {
-  const deadline = Date.now() + RETRY_WINDOW_MS;
+  const deadline = Date.now() + WAKE_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(BACKEND_WAKE_URL, {
-        method: "GET",
         mode: "cors",
         credentials: "omit",
         cache: "no-store",
         signal: controller.signal,
       });
-      clearTimeout(timeout);
-
-      // /api/auth/me returns 401 without a cookie; that confirms Render is awake.
-      if (response.status < 500) return true;
+      if (response.status < 500) return;
     } catch {
-      // A sleeping Render service or its startup page may fail the cross-origin request.
+      // Retry while Render is starting.
+    } finally {
+      clearTimeout(timeout);
     }
 
-    await wait(RETRY_DELAY_MS);
+    await wait(WAKE_RETRY_MS);
   }
-
-  return false;
 }
 
 export const AuthProvider = ({ children }) => {
@@ -43,35 +40,19 @@ export const AuthProvider = ({ children }) => {
   const [retrying, setRetrying] = useState(false);
 
   const checkSession = useCallback(async () => {
-    const deadline = Date.now() + RETRY_WINDOW_MS;
     setRetrying(true);
     setBackendUnavailable(true);
 
     try {
-      // Wake Render without sending the auth cookie, then use Vercel for session/API traffic.
+      // Wake Render without its auth cookie; keep session traffic on Vercel.
       await wakeBackend();
-
-      while (true) {
-        try {
-          const res = await axios.get("/api/auth/me", { timeout: 15000 });
-          setUser(res.data.user);
-          setBackendUnavailable(false);
-          return;
-        } catch (error) {
-          setUser(null);
-          const status = error.response?.status;
-          const canRetry = !status || status === 502 || status === 503 || status === 504;
-
-          if (!canRetry) {
-            setBackendUnavailable(false);
-            return;
-          }
-
-          setBackendUnavailable(true);
-          if (Date.now() + RETRY_DELAY_MS >= deadline) return;
-          await wait(RETRY_DELAY_MS);
-        }
-      }
+      const res = await axios.get("/api/auth/me", { timeout: 15000 });
+      setUser(res.data.user);
+      setBackendUnavailable(false);
+    } catch (error) {
+      setUser(null);
+      const status = error.response?.status;
+      setBackendUnavailable(!status || status === 502 || status === 503 || status === 504);
     } finally {
       setLoading(false);
       setRetrying(false);
