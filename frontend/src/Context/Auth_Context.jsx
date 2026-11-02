@@ -15,30 +15,33 @@ export const AuthProvider = ({ children }) => {
 
   const checkSession = useCallback(async () => {
     const deadline = Date.now() + RETRY_WINDOW_MS;
-
     setRetrying(true);
-    while (true) {
-      try {
-        const res = await axios.get("/api/auth/me", { timeout: 15000 });
-        setUser(res.data.user);
-        setBackendUnavailable(false);
-        return;
-      } catch (error) {
-        setUser(null);
-        const status = error.response?.status;
-        const canRetry = !status || status === 502 || status === 503 || status === 504;
 
-        if (!canRetry) {
+    try {
+      while (true) {
+        try {
+          const res = await axios.get("/api/auth/me", { timeout: 15000 });
+          setUser(res.data.user);
           setBackendUnavailable(false);
           return;
-        }
+        } catch (error) {
+          setUser(null);
+          const status = error.response?.status;
+          const canRetry = !status || status === 502 || status === 503 || status === 504;
 
-        setBackendUnavailable(true);
-        if (Date.now() + RETRY_DELAY_MS >= deadline) return;
-        await wait(RETRY_DELAY_MS);
-      } finally {
-        setLoading(false);
+          if (!canRetry) {
+            setBackendUnavailable(false);
+            return;
+          }
+
+          setBackendUnavailable(true);
+          if (Date.now() + RETRY_DELAY_MS >= deadline) return;
+          await wait(RETRY_DELAY_MS);
+        }
       }
+    } finally {
+      setLoading(false);
+      setRetrying(false);
     }
   }, []);
 
@@ -47,6 +50,7 @@ export const AuthProvider = ({ children }) => {
   }, [checkSession]);
 
   const retryConnection = () => {
+    setLoading(true);
     checkSession();
   };
 
