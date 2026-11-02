@@ -2,10 +2,39 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import axios from "axios";
 
 const AuthContext = createContext(null);
+const BACKEND_WAKE_URL = "https://beeper-forai.onrender.com/api/auth/me";
 const RETRY_DELAY_MS = 5000;
 const RETRY_WINDOW_MS = 120000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function wakeBackend() {
+  const deadline = Date.now() + RETRY_WINDOW_MS;
+
+  while (Date.now() < deadline) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(BACKEND_WAKE_URL, {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      // /api/auth/me returns 401 without a cookie; that confirms Render is awake.
+      if (response.status < 500) return true;
+    } catch {
+      // A sleeping Render service or its startup page may fail the cross-origin request.
+    }
+
+    await wait(RETRY_DELAY_MS);
+  }
+
+  return false;
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -16,8 +45,12 @@ export const AuthProvider = ({ children }) => {
   const checkSession = useCallback(async () => {
     const deadline = Date.now() + RETRY_WINDOW_MS;
     setRetrying(true);
+    setBackendUnavailable(true);
 
     try {
+      // Wake Render without sending the auth cookie, then use Vercel for session/API traffic.
+      await wakeBackend();
+
       while (true) {
         try {
           const res = await axios.get("/api/auth/me", { timeout: 15000 });
@@ -80,7 +113,7 @@ export const AuthProvider = ({ children }) => {
         >
           <span>
             {retrying
-              ? "The server may be waking up. Retrying automatically for up to two minutes..."
+              ? "Waking the server, then reconnecting through the app..."
               : "The server is still unavailable. Try again when it has had time to wake up."}
           </span>
           {!retrying && (
