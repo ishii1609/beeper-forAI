@@ -2,6 +2,10 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import axios from "axios";
 
 const AuthContext = createContext(null);
+const RETRY_DELAY_MS = 5000;
+const RETRY_WINDOW_MS = 120000;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,19 +14,31 @@ export const AuthProvider = ({ children }) => {
   const [retrying, setRetrying] = useState(false);
 
   const checkSession = useCallback(async () => {
-    try {
-      const res = await axios.get("/api/auth/me", { timeout: 65000 });
-      setUser(res.data.user);
-      setBackendUnavailable(false);
-    } catch (error) {
-      setUser(null);
-      const status = error.response?.status;
-      setBackendUnavailable(
-        !status || status === 502 || status === 503 || status === 504
-      );
-    } finally {
-      setLoading(false);
-      setRetrying(false);
+    const deadline = Date.now() + RETRY_WINDOW_MS;
+
+    setRetrying(true);
+    while (true) {
+      try {
+        const res = await axios.get("/api/auth/me", { timeout: 15000 });
+        setUser(res.data.user);
+        setBackendUnavailable(false);
+        return;
+      } catch (error) {
+        setUser(null);
+        const status = error.response?.status;
+        const canRetry = !status || status === 502 || status === 503 || status === 504;
+
+        if (!canRetry) {
+          setBackendUnavailable(false);
+          return;
+        }
+
+        setBackendUnavailable(true);
+        if (Date.now() + RETRY_DELAY_MS >= deadline) return;
+        await wait(RETRY_DELAY_MS);
+      } finally {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -31,7 +47,6 @@ export const AuthProvider = ({ children }) => {
   }, [checkSession]);
 
   const retryConnection = () => {
-    setRetrying(true);
     checkSession();
   };
 
@@ -60,16 +75,19 @@ export const AuthProvider = ({ children }) => {
           className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-3 bg-amber-300 px-4 py-3 text-sm font-medium text-slate-950 shadow-lg"
         >
           <span>
-            The server may be waking up. This can take up to a minute. Try again shortly.
+            {retrying
+              ? "The server may be waking up. Retrying automatically for up to two minutes..."
+              : "The server is still unavailable. Try again when it has had time to wake up."}
           </span>
-          <button
-            type="button"
-            onClick={retryConnection}
-            disabled={retrying}
-            className="rounded-md bg-slate-950 px-3 py-1.5 text-white disabled:opacity-60"
-          >
-            {retrying ? "Checking..." : "Retry"}
-          </button>
+          {!retrying && (
+            <button
+              type="button"
+              onClick={retryConnection}
+              className="rounded-md bg-slate-950 px-3 py-1.5 text-white"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
       {children}
